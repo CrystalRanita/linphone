@@ -64,6 +64,52 @@ MainDb::MainDb (const shared_ptr<Core> &core) : AbstractDb(*new MainDbPrivate), 
 #ifdef SOCI_ENABLED
 
 // -----------------------------------------------------------------------------
+// Errors handling.
+// -----------------------------------------------------------------------------
+
+#define L_SAFE_TRANSACTION \
+	LinphonePrivate::Private::SafeTransactionEnum() + [&]()
+
+template<typename Function>
+class SafeTransaction {
+public:
+	using ReturnType = typename std::remove_reference<decltype(std::declval<Function>()())>::type;
+
+	SafeTransaction (
+		const char *name,
+		Function function
+	) : mFunction(std::move(function)) {
+		// TODO: Deal with function name, use __func__.
+		try {
+			mResult = mFunction();
+		} catch (...) {
+			// TODO: Handle mysql & generic exceptions.
+		}
+	}
+
+	SafeTransaction (SafeTransaction &&safeTransaction) : mFunction(std::move(safeTransaction.mFunction)) {}
+
+	operator ReturnType () const {
+		return mResult;
+	}
+
+private:
+	Function mFunction;
+	ReturnType mResult{};
+
+	L_DISABLE_COPY(SafeTransaction);
+};
+
+namespace Private {
+	enum class SafeTransactionEnum {};
+
+	template<typename Function>
+	typename SafeTransaction<Function>::ReturnType operator+ (SafeTransactionEnum, Function &&function) {
+		return SafeTransaction<Function>(nullptr, std::forward<Function>(function));
+	}
+}
+
+// -----------------------------------------------------------------------------
 // Soci backend.
 // -----------------------------------------------------------------------------
 
