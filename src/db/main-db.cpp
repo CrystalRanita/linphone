@@ -1653,125 +1653,107 @@ void MainDb::init () {
 }
 
 bool MainDb::addEvent (const shared_ptr<EventLog> &eventLog) {
-	L_D();
-
-	if (!isConnected()) {
-		lWarning() << "Unable to add event. Not connected.";
-		return false;
-	}
-
 	const EventLogPrivate *dEventLog = eventLog->getPrivate();
 	if (dEventLog->dbKey.isValid()) {
 		lWarning() << "Unable to add an event twice!!!";
 		return false;
 	}
 
-	bool soFarSoGood = false;
-	long long storageId = 0;
+	return L_SAFE_TRANSACTION {
+		L_D();
 
-	L_BEGIN_LOG_EXCEPTION
+		long long storageId = 0;
 
-	soci::transaction tr(*d->dbSession.getBackendSession<soci::session>());
+		soci::transaction tr(*d->dbSession.getBackendSession<soci::session>());
 
-	EventLog::Type type = eventLog->getType();
-	switch (type) {
-		case EventLog::Type::None:
-			return false;
+		EventLog::Type type = eventLog->getType();
+		switch (type) {
+			case EventLog::Type::None:
+				return false;
 
-		case EventLog::Type::ConferenceCreated:
-		case EventLog::Type::ConferenceTerminated:
-			storageId = d->insertConferenceEvent(eventLog);
-			break;
+			case EventLog::Type::ConferenceCreated:
+			case EventLog::Type::ConferenceTerminated:
+				storageId = d->insertConferenceEvent(eventLog);
+				break;
 
-		case EventLog::Type::ConferenceCallStart:
-		case EventLog::Type::ConferenceCallEnd:
-			storageId = d->insertConferenceCallEvent(eventLog);
-			break;
+			case EventLog::Type::ConferenceCallStart:
+			case EventLog::Type::ConferenceCallEnd:
+				storageId = d->insertConferenceCallEvent(eventLog);
+				break;
 
-		case EventLog::Type::ConferenceChatMessage:
-			storageId = d->insertConferenceChatMessageEvent(eventLog);
-			break;
+			case EventLog::Type::ConferenceChatMessage:
+				storageId = d->insertConferenceChatMessageEvent(eventLog);
+				break;
 
-		case EventLog::Type::ConferenceParticipantAdded:
-		case EventLog::Type::ConferenceParticipantRemoved:
-		case EventLog::Type::ConferenceParticipantSetAdmin:
-		case EventLog::Type::ConferenceParticipantUnsetAdmin:
-			storageId = d->insertConferenceParticipantEvent(eventLog);
-			break;
+			case EventLog::Type::ConferenceParticipantAdded:
+			case EventLog::Type::ConferenceParticipantRemoved:
+			case EventLog::Type::ConferenceParticipantSetAdmin:
+			case EventLog::Type::ConferenceParticipantUnsetAdmin:
+				storageId = d->insertConferenceParticipantEvent(eventLog);
+				break;
 
-		case EventLog::Type::ConferenceParticipantDeviceAdded:
-		case EventLog::Type::ConferenceParticipantDeviceRemoved:
-			storageId = d->insertConferenceParticipantDeviceEvent(eventLog);
-			break;
+			case EventLog::Type::ConferenceParticipantDeviceAdded:
+			case EventLog::Type::ConferenceParticipantDeviceRemoved:
+				storageId = d->insertConferenceParticipantDeviceEvent(eventLog);
+				break;
 
-		case EventLog::Type::ConferenceSubjectChanged:
-			storageId = d->insertConferenceSubjectEvent(eventLog);
-			break;
-	}
+			case EventLog::Type::ConferenceSubjectChanged:
+				storageId = d->insertConferenceSubjectEvent(eventLog);
+				break;
+		}
 
-	if (storageId >= 0) {
-		tr.commit();
-		d->cache(eventLog, storageId);
+		if (storageId >= 0) {
+			tr.commit();
+			d->cache(eventLog, storageId);
 
-		if (type == EventLog::Type::ConferenceChatMessage)
-			d->cache(static_pointer_cast<ConferenceChatMessageEvent>(eventLog)->getChatMessage(), storageId);
+			if (type == EventLog::Type::ConferenceChatMessage)
+				d->cache(static_pointer_cast<ConferenceChatMessageEvent>(eventLog)->getChatMessage(), storageId);
 
-		soFarSoGood = true;
-	}
+			return true;
+		}
 
-	L_END_LOG_EXCEPTION
-
-	return soFarSoGood;
+		return false;
+	};
 }
 
 bool MainDb::updateEvent (const shared_ptr<EventLog> &eventLog) {
-	L_D();
-
-	if (!isConnected()) {
-		lWarning() << "Unable to update event. Not connected.";
-		return false;
-	}
-
 	const EventLogPrivate *dEventLog = eventLog->getPrivate();
 	if (!dEventLog->dbKey.isValid()) {
 		lWarning() << "Unable to update an event that wasn't inserted yet!!!";
 		return false;
 	}
 
-	L_BEGIN_LOG_EXCEPTION
+	return L_SAFE_TRANSACTION {
+		L_D();
 
-	soci::transaction tr(*d->dbSession.getBackendSession<soci::session>());
+		soci::transaction tr(*d->dbSession.getBackendSession<soci::session>());
 
-	switch (eventLog->getType()) {
-		case EventLog::Type::None:
-			return false;
+		switch (eventLog->getType()) {
+			case EventLog::Type::None:
+				return false;
 
-		case EventLog::Type::ConferenceChatMessage:
-			d->updateConferenceChatMessageEvent(eventLog);
-			break;
+			case EventLog::Type::ConferenceChatMessage:
+				d->updateConferenceChatMessageEvent(eventLog);
+				break;
 
-		case EventLog::Type::ConferenceCreated:
-		case EventLog::Type::ConferenceTerminated:
-		case EventLog::Type::ConferenceCallStart:
-		case EventLog::Type::ConferenceCallEnd:
-		case EventLog::Type::ConferenceParticipantAdded:
-		case EventLog::Type::ConferenceParticipantRemoved:
-		case EventLog::Type::ConferenceParticipantSetAdmin:
-		case EventLog::Type::ConferenceParticipantUnsetAdmin:
-		case EventLog::Type::ConferenceParticipantDeviceAdded:
-		case EventLog::Type::ConferenceParticipantDeviceRemoved:
-		case EventLog::Type::ConferenceSubjectChanged:
-			return false;
-	}
+			case EventLog::Type::ConferenceCreated:
+			case EventLog::Type::ConferenceTerminated:
+			case EventLog::Type::ConferenceCallStart:
+			case EventLog::Type::ConferenceCallEnd:
+			case EventLog::Type::ConferenceParticipantAdded:
+			case EventLog::Type::ConferenceParticipantRemoved:
+			case EventLog::Type::ConferenceParticipantSetAdmin:
+			case EventLog::Type::ConferenceParticipantUnsetAdmin:
+			case EventLog::Type::ConferenceParticipantDeviceAdded:
+			case EventLog::Type::ConferenceParticipantDeviceRemoved:
+			case EventLog::Type::ConferenceSubjectChanged:
+				return false;
+		}
 
-	tr.commit();
+		tr.commit();
 
-	return true;
-
-	L_END_LOG_EXCEPTION
-
-	// Error.
-	return false;
+		return true;
+	};
 }
 
 bool MainDb::deleteEvent (const shared_ptr<const EventLog> &eventLog) {
@@ -1786,77 +1768,55 @@ bool MainDb::deleteEvent (const shared_ptr<const EventLog> &eventLog) {
 	L_ASSERT(core);
 
 	MainDb &mainDb = *core->getPrivate()->mainDb.get();
-	if (!mainDb.isConnected()) {
-		lWarning() << "Unable to delete event. Not connected.";
-		return false;
-	}
 
-	L_BEGIN_LOG_EXCEPTION
+	return L_SAFE_TRANSACTION {
+		soci::session *session = mainDb.getPrivate()->dbSession.getBackendSession<soci::session>();
+		*session << "DELETE FROM event WHERE id = :id", soci::use(dEventKey->storageId);
 
-	soci::session *session = mainDb.getPrivate()->dbSession.getBackendSession<soci::session>();
-	*session << "DELETE FROM event WHERE id = :id", soci::use(dEventKey->storageId);
+		dEventLog->dbKey = MainDbEventKey();
 
-	dEventLog->dbKey = MainDbEventKey();
+		if (eventLog->getType() == EventLog::Type::ConferenceChatMessage)
+			static_pointer_cast<const ConferenceChatMessageEvent>(
+				eventLog
+			)->getChatMessage()->getPrivate()->dbKey = MainDbChatMessageKey();
 
-	if (eventLog->getType() == EventLog::Type::ConferenceChatMessage)
-		static_pointer_cast<const ConferenceChatMessageEvent>(
-			eventLog
-		)->getChatMessage()->getPrivate()->dbKey = MainDbChatMessageKey();
-
-	return true;
-
-	L_END_LOG_EXCEPTION
-
-	// Error.
-	return false;
+		return true;
+	};
 }
 
 int MainDb::getEventCount (FilterMask mask) const {
-	L_D();
-
-	if (!isConnected()) {
-		lWarning() << "Unable to get events count. Not connected.";
-		return 0;
-	}
-
 	string query = "SELECT COUNT(*) FROM event" +
 		buildSqlEventFilter({ ConferenceCallFilter, ConferenceChatMessageFilter, ConferenceInfoFilter }, mask);
-	int count = 0;
 
 	DurationLogger durationLogger(
 		"Get events count with mask=" + Utils::toString(mask) + "."
 	);
 
-	L_BEGIN_LOG_EXCEPTION
+	return L_SAFE_TRANSACTION {
+		L_D();
 
-	soci::session *session = d->dbSession.getBackendSession<soci::session>();
-	*session << query, soci::into(count);
-
-	L_END_LOG_EXCEPTION
-
-	return count;
+		int count;
+		soci::session *session = d->dbSession.getBackendSession<soci::session>();
+		*session << query, soci::into(count);
+		return count;
+	};
 }
 
 shared_ptr<EventLog> MainDb::getEventFromKey (const MainDbKey &dbKey) {
-	shared_ptr<EventLog> event;
-
 	if (!dbKey.isValid()) {
 		lWarning() << "Unable to get event from invalid key.";
-		return event;
+		return nullptr;
 	}
 
 	unique_ptr<MainDb> &q = dbKey.getPrivate()->core.lock()->getPrivate()->mainDb;
 	MainDbPrivate *d = q->getPrivate();
 
-	if (!q->isConnected()) {
-		lWarning() << "Unable to get event from key. Not connected.";
-		return event;
-	}
-
 	const long long &storageId = dbKey.getPrivate()->storageId;
-	event = d->getEventFromCache(storageId);
-	if (event)
-		return event;
+	{
+		shared_ptr<EventLog> event = d->getEventFromCache(storageId);
+		if (event)
+			return event;
+	}
 
 	// TODO: Improve. Deal with all events in the future.
 	static const string query = "SELECT peer_sip_address.value, local_sip_address.value, type, event.creation_time"
@@ -1867,28 +1827,24 @@ shared_ptr<EventLog> MainDb::getEventFromKey (const MainDbKey &dbKey) {
 		"  AND chat_room.peer_sip_address_id = peer_sip_address.id"
 		"  AND chat_room.local_sip_address_id = local_sip_address.id";
 
-	L_BEGIN_LOG_EXCEPTION
+	return L_SAFE_TRANSACTION {
+		soci::session *session = d->dbSession.getBackendSession<soci::session>();
+		soci::transaction tr(*session);
 
-	soci::session *session = d->dbSession.getBackendSession<soci::session>();
-	soci::transaction tr(*session);
+		string peerSipAddress;
+		string localSipAddress;
+		int type;
+		tm creationTime;
+		*session << query, soci::into(peerSipAddress), soci::into(localSipAddress), soci::into(type),
+			soci::into(creationTime), soci::use(storageId);
 
-	string peerSipAddress;
-	string localSipAddress;
-	int type;
-	tm creationTime;
-	*session << query, soci::into(peerSipAddress), soci::into(localSipAddress), soci::into(type),
-		soci::into(creationTime), soci::use(storageId);
-
-	event = d->selectGenericConferenceEvent(
-		storageId,
-		static_cast<EventLog::Type>(type),
-		Utils::getTmAsTimeT(creationTime),
-		ChatRoomId(IdentityAddress(peerSipAddress), IdentityAddress(localSipAddress))
-	);
-
-	L_END_LOG_EXCEPTION
-
-	return event;
+		return d->selectGenericConferenceEvent(
+			storageId,
+			static_cast<EventLog::Type>(type),
+			Utils::getTmAsTimeT(creationTime),
+			ChatRoomId(IdentityAddress(peerSipAddress), IdentityAddress(localSipAddress))
+		);
+	};
 }
 
 list<shared_ptr<EventLog>> MainDb::getConferenceNotifiedEvents (
@@ -1902,95 +1858,68 @@ list<shared_ptr<EventLog>> MainDb::getConferenceNotifiedEvents (
 		"    ) AND notify_id > :lastNotifyId"
 		"  )";
 
-	L_D();
-
-	list<shared_ptr<EventLog>> events;
-
-	if (!isConnected()) {
-		lWarning() << "Unable to get conference notified events. Not connected.";
-		return events;
-	}
-
 	DurationLogger durationLogger(
 		"Get conference notified events of: (peer=" + chatRoomId.getPeerAddress().asString() +
 		", local=" + chatRoomId.getLocalAddress().asString() +
 		", lastNotifyId=" + Utils::toString(lastNotifyId) + ")."
 	);
 
-	L_BEGIN_LOG_EXCEPTION
+	return L_SAFE_TRANSACTION {
+		L_D();
 
-	soci::session *session = d->dbSession.getBackendSession<soci::session>();
-	soci::transaction tr(*session);
+		soci::session *session = d->dbSession.getBackendSession<soci::session>();
+		soci::transaction tr(*session);
 
-	const long long &dbChatRoomId = d->selectChatRoomId(chatRoomId);
+		const long long &dbChatRoomId = d->selectChatRoomId(chatRoomId);
 
-	soci::rowset<soci::row> rows = (session->prepare << query, soci::use(dbChatRoomId), soci::use(lastNotifyId));
-	for (const auto &row : rows) {
-		long long eventId = d->resolveId(row, 0);
-		shared_ptr<EventLog> eventLog = d->getEventFromCache(eventId);
+		list<shared_ptr<EventLog>> events;
+		soci::rowset<soci::row> rows = (session->prepare << query, soci::use(dbChatRoomId), soci::use(lastNotifyId));
+		for (const auto &row : rows) {
+			long long eventId = d->resolveId(row, 0);
+			shared_ptr<EventLog> eventLog = d->getEventFromCache(eventId);
 
-		events.push_back(eventLog ? eventLog : d->selectGenericConferenceEvent(
-			eventId,
-			static_cast<EventLog::Type>(row.get<int>(1)),
-			Utils::getTmAsTimeT(row.get<tm>(2)),
-			chatRoomId
-		));
-	}
+			events.push_back(eventLog ? eventLog : d->selectGenericConferenceEvent(
+				eventId,
+				static_cast<EventLog::Type>(row.get<int>(1)),
+				Utils::getTmAsTimeT(row.get<tm>(2)),
+				chatRoomId
+			));
+		}
 
-	return events;
-
-	L_END_LOG_EXCEPTION
-
-	// Error.
-	return list<shared_ptr<EventLog>>();
+		return events;
+	};
 }
 
 int MainDb::getChatMessageCount (const ChatRoomId &chatRoomId) const {
-	L_D();
-
-	if (!isConnected()) {
-		lWarning() << "Unable to get messages count. Not connected.";
-		return 0;
-	}
-
-	int count = 0;
-
 	DurationLogger durationLogger(
 		"Get chat messages count of: (peer=" + chatRoomId.getPeerAddress().asString() +
 		", local=" + chatRoomId.getLocalAddress().asString() + ")."
 	);
 
-	L_BEGIN_LOG_EXCEPTION
+	return L_SAFE_TRANSACTION {
+		L_D();
 
-	soci::session *session = d->dbSession.getBackendSession<soci::session>();
+		int count;
 
-	string query = "SELECT COUNT(*) FROM conference_chat_message_event";
-	if (!chatRoomId.isValid())
-		*session << query, soci::into(count);
-	else {
-		query += "  WHERE event_id IN ("
-			"  SELECT event_id FROM conference_event WHERE chat_room_id = :chatRoomId"
-			")";
+		soci::session *session = d->dbSession.getBackendSession<soci::session>();
 
-		const long long &dbChatRoomId = d->selectChatRoomId(chatRoomId);
-		*session << query, soci::use(dbChatRoomId), soci::into(count);
-	}
+		string query = "SELECT COUNT(*) FROM conference_chat_message_event";
+		if (!chatRoomId.isValid())
+			*session << query, soci::into(count);
+		else {
+			query += "  WHERE event_id IN ("
+				"  SELECT event_id FROM conference_event WHERE chat_room_id = :chatRoomId"
+				")";
 
-	L_END_LOG_EXCEPTION
+			const long long &dbChatRoomId = d->selectChatRoomId(chatRoomId);
+			*session << query, soci::use(dbChatRoomId), soci::into(count);
+		}
 
-	return count;
+		return count;
+	};
 }
 
 int MainDb::getUnreadChatMessageCount (const ChatRoomId &chatRoomId) const {
-	L_D();
-
-	if (!isConnected()) {
-		lWarning() << "Unable to get unread messages count. Not connected.";
-		return 0;
-	}
-
-	int count = 0;
-
 	string query = "SELECT COUNT(*) FROM conference_chat_message_event WHERE";
 	if (chatRoomId.isValid())
 		query += " event_id IN ("
@@ -2005,30 +1934,25 @@ int MainDb::getUnreadChatMessageCount (const ChatRoomId &chatRoomId) const {
 		", local=" + chatRoomId.getLocalAddress().asString() + ")."
 	);
 
-	L_BEGIN_LOG_EXCEPTION
+	return L_SAFE_TRANSACTION {
+		L_D();
 
-	soci::session *session = d->dbSession.getBackendSession<soci::session>();
+		int count = 0;
 
-	if (!chatRoomId.isValid())
-		*session << query, soci::into(count);
-	else {
-		const long long &dbChatRoomId = d->selectChatRoomId(chatRoomId);
-		*session << query, soci::use(dbChatRoomId), soci::into(count);
-	}
+		soci::session *session = d->dbSession.getBackendSession<soci::session>();
 
-	L_END_LOG_EXCEPTION
+		if (!chatRoomId.isValid())
+			*session << query, soci::into(count);
+		else {
+			const long long &dbChatRoomId = d->selectChatRoomId(chatRoomId);
+			*session << query, soci::use(dbChatRoomId), soci::into(count);
+		}
 
-	return count;
+		return count;
+	};
 }
 
 void MainDb::markChatMessagesAsRead (const ChatRoomId &chatRoomId) const {
-	L_D();
-
-	if (!isConnected()) {
-		lWarning() << "Unable to mark messages as read. Not connected.";
-		return;
-	}
-
 	if (getUnreadChatMessageCount(chatRoomId) == 0)
 		return;
 
@@ -2046,30 +1970,23 @@ void MainDb::markChatMessagesAsRead (const ChatRoomId &chatRoomId) const {
 		", local=" + chatRoomId.getLocalAddress().asString() + ")."
 	);
 
-	L_BEGIN_LOG_EXCEPTION
+	L_SAFE_TRANSACTION {
+		L_D();
 
-	soci::session *session = d->dbSession.getBackendSession<soci::session>();
+		soci::session *session = d->dbSession.getBackendSession<soci::session>();
 
-	if (!chatRoomId.isValid())
-		*session << query;
-	else {
-		const long long &dbChatRoomId = d->selectChatRoomId(chatRoomId);
-		*session << query, soci::use(dbChatRoomId);
-	}
+		if (!chatRoomId.isValid())
+			*session << query;
+		else {
+			const long long &dbChatRoomId = d->selectChatRoomId(chatRoomId);
+			*session << query, soci::use(dbChatRoomId);
+		}
 
-	L_END_LOG_EXCEPTION
+		return true;
+	};
 }
 
 list<shared_ptr<ChatMessage>> MainDb::getUnreadChatMessages (const ChatRoomId &chatRoomId) const {
-	L_D();
-
-	list<shared_ptr<ChatMessage>> chatMessages;
-
-	if (!isConnected()) {
-		lWarning() << "Unable to get unread chat messages. Not connected.";
-		return chatMessages;
-	}
-
 	string query = "SELECT id, creation_time FROM event WHERE"
 		"  id IN ("
 		"    SELECT conference_event.event_id FROM conference_event, conference_chat_message_event"
@@ -2086,41 +2003,39 @@ list<shared_ptr<ChatMessage>> MainDb::getUnreadChatMessages (const ChatRoomId &c
 		", local=" + chatRoomId.getLocalAddress().asString() + ")."
 	);
 
-	L_BEGIN_LOG_EXCEPTION
+	return L_SAFE_TRANSACTION {
+		L_D();
 
-	soci::session *session = d->dbSession.getBackendSession<soci::session>();
-	soci::transaction tr(*session);
+		soci::session *session = d->dbSession.getBackendSession<soci::session>();
+		soci::transaction tr(*session);
 
-	long long dbChatRoomId;
-	if (chatRoomId.isValid())
-		dbChatRoomId = d->selectChatRoomId(chatRoomId);
+		long long dbChatRoomId;
+		if (chatRoomId.isValid())
+			dbChatRoomId = d->selectChatRoomId(chatRoomId);
 
-	soci::rowset<soci::row> rows = chatRoomId.isValid()
-		? (session->prepare << query, soci::use(dbChatRoomId))
-		: (session->prepare << query);
+		list<shared_ptr<ChatMessage>> chatMessages;
+		soci::rowset<soci::row> rows = chatRoomId.isValid()
+			? (session->prepare << query, soci::use(dbChatRoomId))
+			: (session->prepare << query);
 
-	for (const auto &row : rows) {
-		long long eventId = d->resolveId(row, 0);
-		shared_ptr<EventLog> event = d->getEventFromCache(eventId);
+		for (const auto &row : rows) {
+			long long eventId = d->resolveId(row, 0);
+			shared_ptr<EventLog> event = d->getEventFromCache(eventId);
 
-		if (!event)
-			event = d->selectGenericConferenceEvent(
-				eventId,
-				EventLog::Type::ConferenceChatMessage,
-				Utils::getTmAsTimeT(row.get<tm>(1)),
-				chatRoomId
-			);
+			if (!event)
+				event = d->selectGenericConferenceEvent(
+					eventId,
+					EventLog::Type::ConferenceChatMessage,
+					Utils::getTmAsTimeT(row.get<tm>(1)),
+					chatRoomId
+				);
 
-		if (event)
-			chatMessages.push_back(static_pointer_cast<ConferenceChatMessageEvent>(event)->getChatMessage());
-	}
+			if (event)
+				chatMessages.push_back(static_pointer_cast<ConferenceChatMessageEvent>(event)->getChatMessage());
+		}
 
-	return chatMessages;
-
-	L_END_LOG_EXCEPTION
-
-	// Error.
-	return list<shared_ptr<ChatMessage>>();
+		return chatMessages;
+	};
 }
 
 shared_ptr<ChatMessage> MainDb::getLastChatMessage (const ChatRoomId &chatRoomId) const {
@@ -2135,15 +2050,6 @@ list<shared_ptr<ChatMessage>> MainDb::findChatMessages (
 	const ChatRoomId &chatRoomId,
 	const string &imdnMessageId
 ) const {
-	L_D();
-
-	list<shared_ptr<ChatMessage>> chatMessages;
-
-	if (!isConnected()) {
-		lWarning() << "Unable to find chat messages. Not connected.";
-		return chatMessages;
-	}
-
 	static const string query = "SELECT id, type, creation_time FROM event"
 		"  WHERE id IN ("
 		"    SELECT event_id FROM conference_event"
@@ -2156,38 +2062,37 @@ list<shared_ptr<ChatMessage>> MainDb::findChatMessages (
 		", local=" + chatRoomId.getLocalAddress().asString() + ")."
 	);
 
-	L_BEGIN_LOG_EXCEPTION
+	return L_SAFE_TRANSACTION {
+		L_D();
 
-	soci::session *session = d->dbSession.getBackendSession<soci::session>();
-	soci::transaction tr(*session);
+		soci::session *session = d->dbSession.getBackendSession<soci::session>();
+		soci::transaction tr(*session);
 
-	const long long &dbChatRoomId = d->selectChatRoomId(chatRoomId);
-	soci::rowset<soci::row> rows = (session->prepare << query, soci::use(imdnMessageId), soci::use(dbChatRoomId));
-	for (const auto &row : rows) {
-		long long eventId = d->resolveId(row, 0);
-		shared_ptr<EventLog> event = d->getEventFromCache(eventId);
+		list<shared_ptr<ChatMessage>> chatMessages;
 
-		if (!event)
-			event = d->selectGenericConferenceEvent(
-				eventId,
-				static_cast<EventLog::Type>(row.get<int>(1)),
-				Utils::getTmAsTimeT(row.get<tm>(2)),
-				chatRoomId
-			);
+		const long long &dbChatRoomId = d->selectChatRoomId(chatRoomId);
+		soci::rowset<soci::row> rows = (session->prepare << query, soci::use(imdnMessageId), soci::use(dbChatRoomId));
+		for (const auto &row : rows) {
+			long long eventId = d->resolveId(row, 0);
+			shared_ptr<EventLog> event = d->getEventFromCache(eventId);
 
-		if (event) {
-			L_ASSERT(event->getType() == EventLog::Type::ConferenceChatMessage);
-			chatMessages.push_back(static_pointer_cast<ConferenceChatMessageEvent>(event)->getChatMessage());
-		} else
-			lWarning() << "Unable to fetch event: " << eventId;
-	}
+			if (!event)
+				event = d->selectGenericConferenceEvent(
+					eventId,
+					static_cast<EventLog::Type>(row.get<int>(1)),
+					Utils::getTmAsTimeT(row.get<tm>(2)),
+					chatRoomId
+				);
 
-	return chatMessages;
+			if (event) {
+				L_ASSERT(event->getType() == EventLog::Type::ConferenceChatMessage);
+				chatMessages.push_back(static_pointer_cast<ConferenceChatMessageEvent>(event)->getChatMessage());
+			} else
+				lWarning() << "Unable to fetch event: " << eventId;
+		}
 
-	L_END_LOG_EXCEPTION
-
-	// Error.
-	return list<shared_ptr<ChatMessage>>();
+		return chatMessages;
+	};
 }
 
 list<shared_ptr<EventLog>> MainDb::getHistory (const ChatRoomId &chatRoomId, int nLast, FilterMask mask) const {
@@ -2200,18 +2105,10 @@ list<shared_ptr<EventLog>> MainDb::getHistoryRange (
 	int end,
 	FilterMask mask
 ) const {
-	L_D();
-
-	list<shared_ptr<EventLog>> events;
-
-	if (!isConnected()) {
-		lWarning() << "Unable to get history. Not connected.";
-		return events;
-	}
-
 	if (begin < 0)
 		begin = 0;
 
+	list<shared_ptr<EventLog>> events;
 	if (end > 0 && begin > end) {
 		lWarning() << "Unable to get history. Invalid range.";
 		return events;
@@ -2240,76 +2137,57 @@ list<shared_ptr<EventLog>> MainDb::getHistoryRange (
 		", begin=" + Utils::toString(begin) + ", end=" + Utils::toString(end) + ")."
 	);
 
-	L_BEGIN_LOG_EXCEPTION
+	return L_SAFE_TRANSACTION {
+		L_D();
 
-	soci::session *session = d->dbSession.getBackendSession<soci::session>();
-	soci::transaction tr(*session);
+		soci::session *session = d->dbSession.getBackendSession<soci::session>();
+		soci::transaction tr(*session);
 
-	const long long &dbChatRoomId = d->selectChatRoomId(chatRoomId);
-	soci::rowset<soci::row> rows = (session->prepare << query, soci::use(dbChatRoomId));
-	for (const auto &row : rows) {
-		long long eventId = d->resolveId(row, 0);
-		shared_ptr<EventLog> event = d->getEventFromCache(eventId);
+		const long long &dbChatRoomId = d->selectChatRoomId(chatRoomId);
+		soci::rowset<soci::row> rows = (session->prepare << query, soci::use(dbChatRoomId));
+		for (const auto &row : rows) {
+			long long eventId = d->resolveId(row, 0);
+			shared_ptr<EventLog> event = d->getEventFromCache(eventId);
 
-		if (!event)
-			event = d->selectGenericConferenceEvent(
-				eventId,
-				static_cast<EventLog::Type>(row.get<int>(1)),
-				Utils::getTmAsTimeT(row.get<tm>(2)),
-				chatRoomId
-			);
+			if (!event)
+				event = d->selectGenericConferenceEvent(
+					eventId,
+					static_cast<EventLog::Type>(row.get<int>(1)),
+					Utils::getTmAsTimeT(row.get<tm>(2)),
+					chatRoomId
+				);
 
-		if (event)
-			events.push_front(event);
-		else
-			lWarning() << "Unable to fetch event: " << eventId;
-	}
+			if (event)
+				events.push_front(event);
+			else
+				lWarning() << "Unable to fetch event: " << eventId;
+		}
 
-	return events;
-
-	L_END_LOG_EXCEPTION
-
-	// Error.
-	return list<shared_ptr<EventLog>>();
+		return events;
+	};
 }
 
 int MainDb::getHistorySize (const ChatRoomId &chatRoomId, FilterMask mask) const {
-	L_D();
-
-	if (!isConnected()) {
-		lWarning() << "Unable to get history size. Not connected.";
-		return 0;
-	}
-
-	int count = 0;
-
 	const string query = "SELECT COUNT(*) FROM event, conference_event"
 		"  WHERE chat_room_id = :chatRoomId"
-		"  AND event_id = event.id" +
-		buildSqlEventFilter({
+		"  AND event_id = event.id" + buildSqlEventFilter({
 			ConferenceCallFilter, ConferenceChatMessageFilter, ConferenceInfoFilter
 		}, mask, "AND");
 
-	L_BEGIN_LOG_EXCEPTION
+	return L_SAFE_TRANSACTION {
+		L_D();
 
-	const long long &dbChatRoomId = d->selectChatRoomId(chatRoomId);
+		int count;
+		const long long &dbChatRoomId = d->selectChatRoomId(chatRoomId);
 
-	soci::session *session = d->dbSession.getBackendSession<soci::session>();
-	*session << query, soci::into(count), soci::use(dbChatRoomId);
+		soci::session *session = d->dbSession.getBackendSession<soci::session>();
+		*session << query, soci::into(count), soci::use(dbChatRoomId);
 
-	L_END_LOG_EXCEPTION
-
-	return count;
+		return count;
+	};
 }
 
 void MainDb::cleanHistory (const ChatRoomId &chatRoomId, FilterMask mask) {
-	L_D();
-
-	if (!isConnected()) {
-		lWarning() << "Unable to clean history. Not connected.";
-		return;
-	}
-
 	const string query = "SELECT event_id FROM conference_event WHERE chat_room_id = :chatRoomId" +
 		buildSqlEventFilter({
 			ConferenceCallFilter, ConferenceChatMessageFilter, ConferenceInfoFilter
@@ -2321,19 +2199,21 @@ void MainDb::cleanHistory (const ChatRoomId &chatRoomId, FilterMask mask) {
 		", mask=" + Utils::toString(mask) + ")."
 	);
 
-	L_BEGIN_LOG_EXCEPTION
+	L_SAFE_TRANSACTION {
+		L_D();
 
-	soci::session *session = d->dbSession.getBackendSession<soci::session>();
-	soci::transaction tr(*session);
+		soci::session *session = d->dbSession.getBackendSession<soci::session>();
+		soci::transaction tr(*session);
 
-	const long long &dbChatRoomId = d->selectChatRoomId(chatRoomId);
+		const long long &dbChatRoomId = d->selectChatRoomId(chatRoomId);
 
-	d->invalidConferenceEventsFromQuery(query, dbChatRoomId);
-	*session << "DELETE FROM event WHERE id IN (" + query + ")", soci::use(dbChatRoomId);
+		d->invalidConferenceEventsFromQuery(query, dbChatRoomId);
+		*session << "DELETE FROM event WHERE id IN (" + query + ")", soci::use(dbChatRoomId);
 
-	tr.commit();
+		tr.commit();
 
-	L_END_LOG_EXCEPTION
+		return true;
+	};
 }
 
 // -----------------------------------------------------------------------------
@@ -2345,255 +2225,228 @@ list<shared_ptr<AbstractChatRoom>> MainDb::getChatRooms () const {
 		"  WHERE chat_room.peer_sip_address_id = peer_sip_address.id AND chat_room.local_sip_address_id = local_sip_address.id"
 		"  ORDER BY last_update_time DESC";
 
-	L_D();
-
-	list<shared_ptr<AbstractChatRoom>> chatRooms;
-
-	if (!isConnected()) {
-		lWarning() << "Unable to get chat rooms. Not connected.";
-		return chatRooms;
-	}
-
-	shared_ptr<Core> core = getCore();
-
 	DurationLogger durationLogger("Get chat rooms.");
 
-	L_BEGIN_LOG_EXCEPTION
+	return L_SAFE_TRANSACTION {
+		L_D();
 
-	soci::session *session = d->dbSession.getBackendSession<soci::session>();
-	soci::transaction tr(*session);
+		list<shared_ptr<AbstractChatRoom>> chatRooms;
+		shared_ptr<Core> core = getCore();
 
-	soci::rowset<soci::row> rows = (session->prepare << query);
-	for (const auto &row : rows) {
-		ChatRoomId chatRoomId = ChatRoomId(
-			IdentityAddress(row.get<string>(1)),
-			IdentityAddress(row.get<string>(2))
-		);
-		shared_ptr<AbstractChatRoom> chatRoom = core->findChatRoom(chatRoomId);
-		if (chatRoom) {
+		soci::session *session = d->dbSession.getBackendSession<soci::session>();
+		soci::transaction tr(*session);
+
+		soci::rowset<soci::row> rows = (session->prepare << query);
+		for (const auto &row : rows) {
+			ChatRoomId chatRoomId = ChatRoomId(
+				IdentityAddress(row.get<string>(1)),
+				IdentityAddress(row.get<string>(2))
+			);
+			shared_ptr<AbstractChatRoom> chatRoom = core->findChatRoom(chatRoomId);
+			if (chatRoom) {
+				chatRooms.push_back(chatRoom);
+				continue;
+			}
+
+			tm creationTime = row.get<tm>(3);
+			tm lastUpdateTime = row.get<tm>(4);
+			int capabilities = row.get<int>(5);
+			string subject = row.get<string>(6, "");
+			unsigned int lastNotifyId = getBackend() == Backend::Mysql
+				? row.get<unsigned int>(7, 0)
+				: static_cast<unsigned int>(row.get<int>(7, 0));
+
+			if (capabilities & ChatRoom::CapabilitiesMask(ChatRoom::Capabilities::Basic)) {
+				chatRoom = core->getPrivate()->createBasicChatRoom(chatRoomId, capabilities);
+				chatRoom->setSubject(subject);
+			} else if (capabilities & ChatRoom::CapabilitiesMask(ChatRoom::Capabilities::Conference)) {
+				list<shared_ptr<Participant>> participants;
+
+				const long long &dbChatRoomId = d->resolveId(row, 0);
+				static const string query = "SELECT chat_room_participant.id, sip_address.value, is_admin"
+					"  FROM sip_address, chat_room, chat_room_participant"
+					"  WHERE chat_room.id = :chatRoomId"
+					"  AND sip_address.id = chat_room_participant.participant_sip_address_id"
+					"  AND chat_room_participant.chat_room_id = chat_room.id";
+
+				// Fetch participants.
+				soci::rowset<soci::row> rows = (session->prepare << query, soci::use(dbChatRoomId));
+				shared_ptr<Participant> me;
+				for (const auto &row : rows) {
+					shared_ptr<Participant> participant = make_shared<Participant>(IdentityAddress(row.get<string>(1)));
+					ParticipantPrivate *dParticipant = participant->getPrivate();
+					dParticipant->setAdmin(!!row.get<int>(2));
+
+					// Fetch devices.
+					{
+						const long long &participantId = d->resolveId(row, 0);
+						static const string query = "SELECT sip_address.value FROM chat_room_participant_device, sip_address"
+							"  WHERE chat_room_participant_id = :participantId"
+							"  AND participant_device_sip_address_id = sip_address.id";
+
+						soci::rowset<soci::row> rows = (session->prepare << query, soci::use(participantId));
+						for (const auto &row : rows)
+							dParticipant->addDevice(IdentityAddress(row.get<string>(0)));
+					}
+
+					if (participant->getAddress() == chatRoomId.getLocalAddress().getAddressWithoutGruu())
+						me = participant;
+					else
+						participants.push_back(participant);
+				}
+
+				if (!linphone_core_conference_server_enabled(core->getCCore())) {
+					bool hasBeenLeft = !!row.get<int>(8, 0);
+					if (!me) {
+						lError() << "Unable to find me in: (peer=" + chatRoomId.getPeerAddress().asString() +
+							", local=" + chatRoomId.getLocalAddress().asString() + ").";
+						continue;
+					}
+					chatRoom = make_shared<ClientGroupChatRoom>(
+						core,
+						chatRoomId,
+						me,
+						subject,
+						move(participants),
+						lastNotifyId
+					);
+					AbstractChatRoomPrivate *dChatRoom = chatRoom->getPrivate();
+					dChatRoom->setState(ChatRoom::State::Instantiated);
+					dChatRoom->setState(hasBeenLeft
+						? ChatRoom::State::Terminated
+						: ChatRoom::State::Created
+					);
+				} else {
+					chatRoom = make_shared<ServerGroupChatRoom>(
+						core,
+						chatRoomId.getPeerAddress(),
+						subject,
+						move(participants),
+						lastNotifyId
+					);
+					AbstractChatRoomPrivate *dChatRoom = chatRoom->getPrivate();
+					dChatRoom->setState(ChatRoom::State::Instantiated);
+					dChatRoom->setState(ChatRoom::State::Created);
+				}
+			}
+
+			if (!chatRoom)
+				continue; // Not fetched.
+
+			AbstractChatRoomPrivate *dChatRoom = chatRoom->getPrivate();
+			dChatRoom->setCreationTime(Utils::getTmAsTimeT(creationTime));
+			dChatRoom->setLastUpdateTime(Utils::getTmAsTimeT(lastUpdateTime));
+
+			lInfo() << "Found chat room in DB: (peer=" <<
+				chatRoomId.getPeerAddress().asString() << ", local=" << chatRoomId.getLocalAddress().asString() << ").";
+
 			chatRooms.push_back(chatRoom);
-			continue;
 		}
 
-		tm creationTime = row.get<tm>(3);
-		tm lastUpdateTime = row.get<tm>(4);
-		int capabilities = row.get<int>(5);
-		string subject = row.get<string>(6, "");
-		unsigned int lastNotifyId = getBackend() == Backend::Mysql
-			? row.get<unsigned int>(7, 0)
-			: static_cast<unsigned int>(row.get<int>(7, 0));
+		tr.commit();
 
-		if (capabilities & ChatRoom::CapabilitiesMask(ChatRoom::Capabilities::Basic)) {
-			chatRoom = core->getPrivate()->createBasicChatRoom(chatRoomId, capabilities);
-			chatRoom->setSubject(subject);
-		} else if (capabilities & ChatRoom::CapabilitiesMask(ChatRoom::Capabilities::Conference)) {
-			list<shared_ptr<Participant>> participants;
-
-			const long long &dbChatRoomId = d->resolveId(row, 0);
-			static const string query = "SELECT chat_room_participant.id, sip_address.value, is_admin"
-				"  FROM sip_address, chat_room, chat_room_participant"
-				"  WHERE chat_room.id = :chatRoomId"
-				"  AND sip_address.id = chat_room_participant.participant_sip_address_id"
-				"  AND chat_room_participant.chat_room_id = chat_room.id";
-
-			// Fetch participants.
-			soci::rowset<soci::row> rows = (session->prepare << query, soci::use(dbChatRoomId));
-			shared_ptr<Participant> me;
-			for (const auto &row : rows) {
-				shared_ptr<Participant> participant = make_shared<Participant>(IdentityAddress(row.get<string>(1)));
-				ParticipantPrivate *dParticipant = participant->getPrivate();
-				dParticipant->setAdmin(!!row.get<int>(2));
-
-				// Fetch devices.
-				{
-					const long long &participantId = d->resolveId(row, 0);
-					static const string query = "SELECT sip_address.value FROM chat_room_participant_device, sip_address"
-						"  WHERE chat_room_participant_id = :participantId"
-						"  AND participant_device_sip_address_id = sip_address.id";
-
-					soci::rowset<soci::row> rows = (session->prepare << query, soci::use(participantId));
-					for (const auto &row : rows)
-						dParticipant->addDevice(IdentityAddress(row.get<string>(0)));
-				}
-
-				if (participant->getAddress() == chatRoomId.getLocalAddress().getAddressWithoutGruu())
-					me = participant;
-				else
-					participants.push_back(participant);
-			}
-
-			if (!linphone_core_conference_server_enabled(core->getCCore())) {
-				bool hasBeenLeft = !!row.get<int>(8, 0);
-				if (!me) {
-					lError() << "Unable to find me in: (peer=" + chatRoomId.getPeerAddress().asString() +
-						", local=" + chatRoomId.getLocalAddress().asString() + ").";
-					continue;
-				}
-				chatRoom = make_shared<ClientGroupChatRoom>(
-					core,
-					chatRoomId,
-					me,
-					subject,
-					move(participants),
-					lastNotifyId
-				);
-				AbstractChatRoomPrivate *dChatRoom = chatRoom->getPrivate();
-				dChatRoom->setState(ChatRoom::State::Instantiated);
-				dChatRoom->setState(hasBeenLeft
-					? ChatRoom::State::Terminated
-					: ChatRoom::State::Created
-				);
-			} else {
-				chatRoom = make_shared<ServerGroupChatRoom>(
-					core,
-					chatRoomId.getPeerAddress(),
-					subject,
-					move(participants),
-					lastNotifyId
-				);
-				AbstractChatRoomPrivate *dChatRoom = chatRoom->getPrivate();
-				dChatRoom->setState(ChatRoom::State::Instantiated);
-				dChatRoom->setState(ChatRoom::State::Created);
-			}
-		}
-
-		if (!chatRoom)
-			continue; // Not fetched.
-
-		AbstractChatRoomPrivate *dChatRoom = chatRoom->getPrivate();
-		dChatRoom->setCreationTime(Utils::getTmAsTimeT(creationTime));
-		dChatRoom->setLastUpdateTime(Utils::getTmAsTimeT(lastUpdateTime));
-
-		lInfo() << "Found chat room in DB: (peer=" <<
-			chatRoomId.getPeerAddress().asString() << ", local=" << chatRoomId.getLocalAddress().asString() << ").";
-
-		chatRooms.push_back(chatRoom);
-	}
-
-	tr.commit();
-
-	return chatRooms;
-
-	L_END_LOG_EXCEPTION
-
-	// Error.
-	return list<shared_ptr<AbstractChatRoom>>();
+		return chatRooms;
+	};
 }
 
 void MainDb::insertChatRoom (const shared_ptr<AbstractChatRoom> &chatRoom) {
-	L_D();
-
-	if (!isConnected()) {
-		lWarning() << "Unable to insert chat room. Not connected.";
-		return;
-	}
-
 	const ChatRoomId &chatRoomId = chatRoom->getChatRoomId();
 	DurationLogger durationLogger(
 		"Insert chat room: (peer=" + chatRoomId.getPeerAddress().asString() +
 		", local=" + chatRoomId.getLocalAddress().asString() + ")."
 	);
 
-	L_BEGIN_LOG_EXCEPTION
+	L_SAFE_TRANSACTION {
+		L_D();
 
-	soci::transaction tr(*d->dbSession.getBackendSession<soci::session>());
+		soci::transaction tr(*d->dbSession.getBackendSession<soci::session>());
 
-	d->insertChatRoom(chatRoom);
+		d->insertChatRoom(chatRoom);
 
-	tr.commit();
+		tr.commit();
 
-	L_END_LOG_EXCEPTION
+		return true;
+	};
 }
 
 void MainDb::deleteChatRoom (const ChatRoomId &chatRoomId) {
-	L_D();
-
-	if (!isConnected()) {
-		lWarning() << "Unable to delete chat room. Not connected.";
-		return;
-	}
-
 	DurationLogger durationLogger(
 		"Delete chat room: (peer=" + chatRoomId.getPeerAddress().asString() +
 		", local=" + chatRoomId.getLocalAddress().asString() + "`)."
 	);
 
-	L_BEGIN_LOG_EXCEPTION
+	L_SAFE_TRANSACTION {
+		L_D();
+		soci::session *session = d->dbSession.getBackendSession<soci::session>();
+		soci::transaction tr(*session);
 
-	soci::session *session = d->dbSession.getBackendSession<soci::session>();
-	soci::transaction tr(*session);
+		const long long &dbChatRoomId = d->selectChatRoomId(chatRoomId);
 
-	const long long &dbChatRoomId = d->selectChatRoomId(chatRoomId);
+		d->invalidConferenceEventsFromQuery(
+			"SELECT event_id FROM conference_event WHERE chat_room_id = :chatRoomId",
+			dbChatRoomId
+		);
 
-	d->invalidConferenceEventsFromQuery(
-		"SELECT event_id FROM conference_event WHERE chat_room_id = :chatRoomId",
-		dbChatRoomId
-	);
+		*session << "DELETE FROM chat_room WHERE id = :chatRoomId", soci::use(dbChatRoomId);
 
-	*session << "DELETE FROM chat_room WHERE id = :chatRoomId", soci::use(dbChatRoomId);
+		tr.commit();
 
-	tr.commit();
-
-	L_END_LOG_EXCEPTION
+		return true;
+	};
 }
 
 void MainDb::migrateBasicToClientGroupChatRoom (
 	const shared_ptr<AbstractChatRoom> &basicChatRoom,
 	const shared_ptr<AbstractChatRoom> &clientGroupChatRoom
 ) {
-	L_D();
-
-	if (!isConnected()) {
-		lWarning() << "Unable to migrate chat room. Not connected.";
-		return;
-	}
-
 	L_ASSERT(basicChatRoom->getCapabilities().isSet(ChatRoom::Capabilities::Basic));
 	L_ASSERT(clientGroupChatRoom->getCapabilities().isSet(ChatRoom::Capabilities::Conference));
 
-	L_BEGIN_LOG_EXCEPTION
+	L_SAFE_TRANSACTION {
+		L_D();
 
-	// TODO: Update events and chat messages. (Or wait signals.)
+		// TODO: Update events and chat messages. (Or wait signals.)
 
-	soci::session *session = d->dbSession.getBackendSession<soci::session>();
-	soci::transaction tr(*session);
+		soci::session *session = d->dbSession.getBackendSession<soci::session>();
+		soci::transaction tr(*session);
 
-	const long long &dbChatRoomId = d->selectChatRoomId(basicChatRoom->getChatRoomId());
+		const long long &dbChatRoomId = d->selectChatRoomId(basicChatRoom->getChatRoomId());
 
-	const ChatRoomId &newChatRoomId = clientGroupChatRoom->getChatRoomId();
-	const long long &peerSipAddressId = d->insertSipAddress(newChatRoomId.getPeerAddress().asString());
-	const long long &localSipAddressId = d->insertSipAddress(newChatRoomId.getLocalAddress().asString());
-	const int &capabilities = clientGroupChatRoom->getCapabilities();
+		const ChatRoomId &newChatRoomId = clientGroupChatRoom->getChatRoomId();
+		const long long &peerSipAddressId = d->insertSipAddress(newChatRoomId.getPeerAddress().asString());
+		const long long &localSipAddressId = d->insertSipAddress(newChatRoomId.getLocalAddress().asString());
+		const int &capabilities = clientGroupChatRoom->getCapabilities();
 
-	*session << "UPDATE chat_room"
-		"  SET capabilities = :capabilities,"
-		"    peer_sip_address_id = :peerSipAddressId,"
-		"    local_sip_address_id = :localSipAddressId"
-		"  WHERE id = :chatRoomId", soci::use(capabilities), soci::use(peerSipAddressId),
-		soci::use(localSipAddressId), soci::use(dbChatRoomId);
+		*session << "UPDATE chat_room"
+			"  SET capabilities = :capabilities,"
+			"    peer_sip_address_id = :peerSipAddressId,"
+			"    local_sip_address_id = :localSipAddressId"
+			"  WHERE id = :chatRoomId", soci::use(capabilities), soci::use(peerSipAddressId),
+			soci::use(localSipAddressId), soci::use(dbChatRoomId);
 
-	shared_ptr<Participant> me = clientGroupChatRoom->getMe();
-	long long meId = d->insertChatRoomParticipant(
-		dbChatRoomId,
-		d->insertSipAddress(me->getAddress().asString()),
-		true
-	);
-	for (const auto &device : me->getPrivate()->getDevices())
-		d->insertChatRoomParticipantDevice(meId, d->insertSipAddress(device->getAddress().asString()));
-
-	for (const auto &participant : clientGroupChatRoom->getParticipants()) {
-		long long participantId = d->insertChatRoomParticipant(
+		shared_ptr<Participant> me = clientGroupChatRoom->getMe();
+		long long meId = d->insertChatRoomParticipant(
 			dbChatRoomId,
-			d->insertSipAddress(participant->getAddress().asString()),
+			d->insertSipAddress(me->getAddress().asString()),
 			true
 		);
-		for (const auto &device : participant->getPrivate()->getDevices())
-			d->insertChatRoomParticipantDevice(participantId, d->insertSipAddress(device->getAddress().asString()));
-	}
+		for (const auto &device : me->getPrivate()->getDevices())
+			d->insertChatRoomParticipantDevice(meId, d->insertSipAddress(device->getAddress().asString()));
 
-	tr.commit();
+		for (const auto &participant : clientGroupChatRoom->getParticipants()) {
+			long long participantId = d->insertChatRoomParticipant(
+				dbChatRoomId,
+				d->insertSipAddress(participant->getAddress().asString()),
+				true
+			);
+			for (const auto &device : participant->getPrivate()->getDevices())
+				d->insertChatRoomParticipantDevice(participantId, d->insertSipAddress(device->getAddress().asString()));
+		}
 
-	L_END_LOG_EXCEPTION
+		tr.commit();
+
+		return true;
+	};
 }
 
 IdentityAddress MainDb::findOneToOneConferenceChatRoomAddress (
@@ -2611,72 +2464,52 @@ IdentityAddress MainDb::findOneToOneConferenceChatRoomAddress (
 		"  AND sip_address.id = peer_sip_address_id"
 		"  LIMIT 1";
 
-	L_D();
+	return L_SAFE_TRANSACTION {
+		L_D();
 
-	if (!isConnected()) {
-		lWarning() << "Unable to find one to one conference chat room. Not connected.";
-		return IdentityAddress();
-	}
+		soci::session *session = d->dbSession.getBackendSession<soci::session>();
+		soci::transaction tr(*session);
 
-	L_BEGIN_LOG_EXCEPTION
+		const string &participantSipAddressA = participantA.asString();
+		const string &participantSipAddressB = participantB.asString();
 
-	soci::session *session = d->dbSession.getBackendSession<soci::session>();
-	soci::transaction tr(*session);
+		string chatRoomAddress;
 
-	const string &participantSipAddressA = participantA.asString();
-	const string &participantSipAddressB = participantB.asString();
+		*session << query, soci::use(participantSipAddressA), soci::use(participantSipAddressB), soci::into(chatRoomAddress);
 
-	string chatRoomAddress;
-
-	*session << query, soci::use(participantSipAddressA), soci::use(participantSipAddressB), soci::into(chatRoomAddress);
-
-	return IdentityAddress(chatRoomAddress);
-
-	L_END_LOG_EXCEPTION
-
-	// Soci error.
-	return IdentityAddress();
+		return IdentityAddress(chatRoomAddress);
+	};
 }
 
 void MainDb::enableChatRoomMigration (const ChatRoomId &chatRoomId, bool enable) {
-	L_D();
+	L_SAFE_TRANSACTION {
+		L_D();
 
-	if (!isConnected()) {
-		lWarning() << "Unable to enable chat room migration. Not connected.";
-		return;
-	}
+		soci::session *session = d->dbSession.getBackendSession<soci::session>();
+		soci::transaction tr(*session);
 
-	L_BEGIN_LOG_EXCEPTION
+		const long long &dbChatRoomId = d->selectChatRoomId(chatRoomId);
 
-	soci::session *session = d->dbSession.getBackendSession<soci::session>();
-	soci::transaction tr(*session);
+		int capabilities = 0;
+		*session << "SELECT capabilities FROM chat_room WHERE id = :chatRoomId",
+			soci::use(dbChatRoomId), soci::into(capabilities);
+		if (enable)
+			capabilities |= static_cast<int>(ChatRoom::Capabilities::Migratable);
+		else
+			capabilities &= ~static_cast<int>(ChatRoom::Capabilities::Migratable);
+		*session << "UPDATE chat_room SET capabilities = :capabilities WHERE id = :chatRoomId",
+			soci::use(capabilities), soci::use(dbChatRoomId);
 
-	const long long &dbChatRoomId = d->selectChatRoomId(chatRoomId);
+		tr.commit();
 
-	int capabilities = 0;
-	*session << "SELECT capabilities FROM chat_room WHERE id = :chatRoomId",
-		soci::use(dbChatRoomId), soci::into(capabilities);
-	if (enable)
-		capabilities |= static_cast<int>(ChatRoom::Capabilities::Migratable);
-	else
-		capabilities &= ~static_cast<int>(ChatRoom::Capabilities::Migratable);
-	*session << "UPDATE chat_room SET capabilities = :capabilities WHERE id = :chatRoomId",
-		soci::use(capabilities), soci::use(dbChatRoomId);
-
-	tr.commit();
-
-	L_END_LOG_EXCEPTION
+		return true;
+	};
 }
 
 // -----------------------------------------------------------------------------
 
 bool MainDb::import (Backend, const string &parameters) {
 	L_D();
-
-	if (!isConnected()) {
-		lWarning() << "Unable to import data. Not connected.";
-		return 0;
-	}
 
 	// Backend is useless, it's sqlite3. (Only available legacy backend.)
 	const string uri = "sqlite3://" + parameters;
@@ -2687,15 +2520,17 @@ bool MainDb::import (Backend, const string &parameters) {
 		return false;
 	}
 
-	L_BEGIN_LOG_EXCEPTION
-	// TODO: Remove condition after cpp migration in friends/friends list.
-	if (false)
-		d->importLegacyFriends(inDbSession);
-	L_END_LOG_EXCEPTION
+	L_SAFE_TRANSACTION {
+		// TODO: Remove condition after cpp migration in friends/friends list.
+		if (false)
+			d->importLegacyFriends(inDbSession);
+		return true;
+	};
 
-	L_BEGIN_LOG_EXCEPTION
-	d->importLegacyHistory(inDbSession);
-	L_END_LOG_EXCEPTION
+	L_SAFE_TRANSACTION {
+		d->importLegacyHistory(inDbSession);
+		return true;
+	};
 
 	return true;
 }

@@ -24,12 +24,45 @@
 
 // =============================================================================
 
+#define L_SAFE_TRANSACTION \
+	LinphonePrivate::Private::SafeTransactionEnum() + [&]()
+
 LINPHONE_BEGIN_NAMESPACE
 
 class AbstractDbPrivate;
 
 class LINPHONE_PUBLIC AbstractDb : public Object {
 public:
+	template<typename Function>
+	class SafeTransaction {
+	public:
+		using ReturnType = typename std::remove_reference<decltype(std::declval<Function>()())>::type;
+
+		SafeTransaction (
+			const char *name,
+			Function function
+		) : mFunction(std::move(function)) {
+			// TODO: Deal with function name, use __func__.
+			try {
+				mResult = mFunction();
+			} catch (...) {
+				// TODO: Handle mysql & generic exceptions.
+			}
+		}
+
+		SafeTransaction (SafeTransaction &&safeTransaction) : mFunction(std::move(safeTransaction.mFunction)) {}
+
+		operator ReturnType () const {
+			return mResult;
+		}
+
+	private:
+		Function mFunction;
+		ReturnType mResult{};
+
+		L_DISABLE_COPY(SafeTransaction);
+	};
+
 	enum Backend {
 		Mysql,
 		Sqlite3
@@ -69,6 +102,15 @@ private:
 	L_DECLARE_PRIVATE(AbstractDb);
 	L_DISABLE_COPY(AbstractDb);
 };
+
+namespace Private {
+	enum class SafeTransactionEnum {};
+
+	template<typename Function>
+	typename AbstractDb::SafeTransaction<Function>::ReturnType operator+ (SafeTransactionEnum, Function &&function) {
+		return AbstractDb::SafeTransaction<Function>(nullptr, std::forward<Function>(function));
+	}
+}
 
 LINPHONE_END_NAMESPACE
 
