@@ -248,4 +248,9 @@ public interface LinphoneCallParams {
 	 * @return the fps
 	 */
 	float getReceivedFramerate();
+
+	/**
+	 * Test static value
+	 */
+	int displayStaticValue();
 }

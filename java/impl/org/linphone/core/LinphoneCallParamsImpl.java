@@ -257,4 +257,9 @@ public class LinphoneCallParamsImpl implements LinphoneCallParams {
 	public float getReceivedFramerate() {
 		return getReceivedFramerate(nativePtr);
 	}
+
+        private native int testStaticValue();
+        public int displayStaticValue() {
+                return testStaticValue();
+        }
 }

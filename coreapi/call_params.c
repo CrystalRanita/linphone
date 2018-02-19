@@ -189,6 +189,12 @@ float linphone_call_params_get_received_framerate(const LinphoneCallParams *cp){
 	return cp->received_fps;
 }
 
+int linphone_call_params_testStaticValue() {
+  static int count = 0;
+  count++;
+  return count;
+}
+
 MSVideoSize linphone_call_params_get_received_video_size(const LinphoneCallParams *cp) {
 	return cp->recv_vsize;
 }

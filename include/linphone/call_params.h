@@ -133,6 +133,11 @@ LINPHONE_PUBLIC LinphonePrivacyMask linphone_call_params_get_privacy(const Linph
 LINPHONE_PUBLIC float linphone_call_params_get_received_framerate(const LinphoneCallParams *cp);
 
 /**
+ * linphone_call_params_testStaticValue
+ */
+LINPHONE_PUBLIC int linphone_call_params_testStaticValue(void);
+
+/**
  * Get the definition of the received video.
  * @param[in] cp LinphoneCallParams object
  * @return The received LinphoneVideoDefinition
